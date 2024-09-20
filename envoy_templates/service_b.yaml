@@ -1,0 +1,59 @@
+#
+# Service B: simulation of a service in a service mesh. It serves as the upstream service in the POC.
+#
+admin:
+  address:
+    socket_address: { address: 127.0.0.1, port_value: 9905 }
+static_resources:
+  listeners:
+  - name: listener_0
+    address: {socket_address: {address: 0.0.0.0, port_value: 10001}}
+    listener_filters:
+      - name: tls_inspector
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          forward_client_cert_details: "APPEND_FORWARD"
+          set_current_client_cert_details:
+            subject: true
+          route_config:
+            name: local_route
+            response_headers_to_add:
+            - header:
+                key: "aloha"
+                value: "%REQUESTED_SERVER_NAME% : %REQ(X-FORWARDED-CLIENT-CERT)%"
+            virtual_hosts:
+            - name: default
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/"}
+                direct_response:
+                  status: 200
+                  body:
+                    inline_string: "alohaaa be mtls"
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          require_client_certificate: true
+          common_tls_context:
+            tls_certificates:
+            - certificate_chain:
+                filename: /Users/menghan/root/ca/intermediate/certs/envoy.cert.pem
+              private_key:
+                filename: /Users/menghan/root/ca/intermediate/private/envoy.key.pem
+              password:
+                inline_string: "envoy"
+            validation_context:
+              trusted_ca:
+                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem

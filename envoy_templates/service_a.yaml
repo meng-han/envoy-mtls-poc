@@ -1,0 +1,147 @@
+#
+# Service A: simulation of a service in a service mesh. It serves as the downstream service in the POC.
+#
+admin:
+  address:
+    socket_address: { address: 127.0.0.1, port_value: 9902 }
+
+static_resources:
+  listeners:
+  - name: listener_to_upstream
+    address:
+      socket_address: { address: 127.0.0.1, port_value: 10000 }
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: upstream_service }
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  - name: listener_to_egress
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10002
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          route_config:
+            name: remote_route
+            virtual_hosts:
+            - name: remote_service
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: igw }
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  - name: listener_to_egress_https
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10004
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          route_config:
+            name: remote_route
+            virtual_hosts:
+            - name: remote_service
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: igwhttps }
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+  - name: upstream_service
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: upstream_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 10001
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        common_tls_context:
+          tls_certificates:
+          - certificate_chain:
+              filename: /Users/menghan/root/ca/intermediate/certs/localcurl.cert.pem
+            private_key:
+              filename: /Users/menghan/root/ca/intermediate/private/localcurl.key.pem
+            password:
+              inline_string: "envoy"
+          validation_context:
+              trusted_ca:
+                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
+  - name: igw
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: igw
+      endpoints:
+        - lb_endpoints:
+          - endpoint:
+              address:
+                socket_address:
+                  address: 127.0.0.1  # You can replace this with any public internet service
+                  port_value: 8181
+  - name: igwhttps
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: igw
+      endpoints:
+        - lb_endpoints:
+          - endpoint:
+              address:
+                socket_address:
+                  address: 127.0.0.1  # You can replace this with any public internet service
+                  port_value: 8183
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        common_tls_context:
+          tls_certificates:
+          - certificate_chain:
+              filename: /Users/menghan/root/ca/intermediate/certs/localcurl.cert.pem
+            private_key:
+              filename: /Users/menghan/root/ca/intermediate/private/localcurl.key.pem
+            password:
+              inline_string: "envoy"
+          validation_context:
+              trusted_ca:
+                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
