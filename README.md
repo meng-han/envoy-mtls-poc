@@ -2,6 +2,10 @@
 
 mTLS setup POC using envoy proxy
 
+Setup:
+
+<img src="doc-assets/envoy-mtls-poc.png" alt="description" width="1000" />
+
 Steps:
 
 1. Follow instructions in https://openssl-ca.readthedocs.io/en/latest/create-the-root-pair.html to create your own root CA, intermediate CA, server cert and client cert. also need to update macos keychain to trust the intermediate ca.
