@@ -20,6 +20,13 @@ static_resources:
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           codec_type: AUTO
+          forward_client_cert_details: SANITIZE_SET
+          set_current_client_cert_details:
+            subject: true
+            cert: true
+            chain: true
+            dns: true
+            uri: true
           stat_prefix: ingress_https
           route_config:
             name: local_route_https
@@ -61,6 +68,24 @@ static_resources:
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          require_client_certificate: true
+          common_tls_context:
+            #tls_params:
+            #  tls_min_version: TLSv1_2
+            tls_certificates:
+            - certificate_chain:
+                filename: /Users/menghan/root/ca/intermediate/certs/envoy.cert.pem
+              private_key:
+                filename: /Users/menghan/root/ca/intermediate/private/envoy.key.pem
+              password:
+                inline_string: "envoy"
+            validation_context:
+              trusted_ca:
+                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
   clusters:
   - name: dynamic_forward_proxy_cluster
     lb_policy: CLUSTER_PROVIDED

@@ -27,10 +27,6 @@ static_resources:
                       {}
                   route:
                     cluster: igwhttps
-                    #upgrade_configs:
-                    #  - upgrade_type: CONNECT
-                    #    connect_config:
-                    #      {}
                 - match: { prefix: "/" }
                   route: { cluster: igwhttps }
           http_filters:
@@ -44,11 +40,11 @@ static_resources:
   clusters:
   - name: igwhttps
     connect_timeout: 5s
-    typed_extension_protocol_options:
-      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
-        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-        explicit_http_config:
-          http2_protocol_options: {}
+    #typed_extension_protocol_options:
+    #  envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+    #    "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+    #    explicit_http_config:
+    #      http2_protocol_options: {}
     load_assignment:
       cluster_name: igwhttps
       endpoints:
@@ -58,3 +54,18 @@ static_resources:
               socket_address:
                 address: 127.0.0.1
                 port_value: 8183
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        common_tls_context:
+          tls_certificates:
+          - certificate_chain:
+              filename: /Users/menghan/root/ca/intermediate/certs/localcurl.cert.pem
+            private_key:
+              filename: /Users/menghan/root/ca/intermediate/private/localcurl.key.pem
+            password:
+              inline_string: "envoy"
+          validation_context:
+              trusted_ca:
+                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
