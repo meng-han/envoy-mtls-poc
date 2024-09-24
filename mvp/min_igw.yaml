@@ -48,6 +48,58 @@ static_resources:
                   route:
                     cluster: dynamic_forward_proxy_cluster
           http_filters:
+          - name: envoy.filters.http.lua
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+              default_source_code: 
+                inline_string: |
+                  function extract_san_dns(cert)
+                    local san_dns = {}
+                    -- Extract SAN DNS from the certificate
+                    for dns in string.gmatch(cert, "DNS=([^,]+)") do
+                      table.insert(san_dns, dns)
+                    end
+                    return san_dns
+                  end
+
+                  function envoy_on_request(request_handle)
+                    local cert = request_handle:headers():get("x-forwarded-client-cert")
+                    request_handle:logInfo("here is the cert" .. cert)
+                    if cert then
+                      local san_dns = extract_san_dns(cert)
+                      request_handle:logInfo("SAN DNS Entries: " .. table.concat(san_dns, ", "))
+                      request_handle:streamInfo():dynamicMetadata():set("envoy.filters.http.lua", "service_name", san_dns)
+                    else
+                      request_handle:respond(
+                        {[":status"] = "403"},
+                        "Client certificate is missing")
+                      return
+                    end
+                  end
+          - name: envoy.filters.http.rbac
+            typed_config: 
+              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC
+              rules:
+                action: ALLOW
+                policies:
+                  "allow_curl_to_google":
+                    permissions:
+                      header:
+                        name: ":authority"
+                        string_match:
+                          safe_regex: 
+                            regex: "^www\\.google\\.com(:[0-9]{1,5})?"
+                    principals:
+                      metadata:
+                        filter: envoy.filters.http.lua
+                        path: 
+                          key: service_name
+                        value:
+                          list_match: 
+                            one_of: 
+                              string_match:
+                                exact: curl
+                      #header: { name: "service_name", exact_match: "curl" }
           - name: envoy.filters.http.dynamic_forward_proxy
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
