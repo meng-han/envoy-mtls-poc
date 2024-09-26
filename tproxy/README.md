@@ -18,14 +18,14 @@
 
 ## Setup
 
-1. Modify IP Table.Create a new NAT chain `ENVOY_EGRESS`. Exclude root uid/gid from it, exclude local internal traffic, then redirect port 80 traffic to port `12003`, redirect all other traffic to port `12000`. 
+1. Modify IP Table. Create a new NAT chain `ENVOY_EGRESS`. Exclude root uid/gid, exclude local internal traffic, then route port 80 traffic to port `12003`, route all other traffic to port `12000`. 
 
 1. spin up all 3 envoy instances - 2 for IGW and 1 for sidecar. In real world there might be just one IGW with different listeners, for now we split it up to 2 envoy instances just for cleaner and shorter code.
 
     ```
     envoy -c igw_http.yaml --log-level debug
     envoy -c igw.yaml --log-level debug --base-id 1
-    envoy -c sidecar.yaml --log-level debug --base-id 1
+    envoy -c sidecar.yaml --log-level debug --base-id 2
     ```
 
     <img src="../doc-assets/tproxy.png" alt="tproxy" width="1000" />
