@@ -105,10 +105,8 @@ static_resources:
         name: envoy.transport_sockets.tls
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
-          #require_client_certificate: true
+          require_client_certificate: true
           common_tls_context:
-            #tls_params:
-            #  tls_min_version: TLSv1_2
             tls_certificates:
             - certificate_chain:
                 filename: /home/admin/ca/intermediate/certs/envoy.cert.pem
