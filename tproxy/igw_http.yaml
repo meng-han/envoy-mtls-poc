@@ -128,14 +128,14 @@ static_resources:
             #  tls_min_version: TLSv1_2
             tls_certificates:
             - certificate_chain:
-                filename: /Users/menghan/root/ca/intermediate/certs/envoy.cert.pem
+                filename: /home/admin/ca/intermediate/certs/envoy.cert.pem
               private_key:
-                filename: /Users/menghan/root/ca/intermediate/private/envoy.key.pem
+                filename: /home/admin/ca/intermediate/private/envoy.key.pem
               password:
                 inline_string: "envoy"
             validation_context:
               trusted_ca:
-                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
+                filename: /home/admin/ca/intermediate/certs/ca-chain.cert.pem
   clusters:
   - name: dynamic_transparent_proxy_cluster_plain_text_http
     lb_policy: CLUSTER_PROVIDED

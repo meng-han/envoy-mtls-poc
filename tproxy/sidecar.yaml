@@ -48,17 +48,17 @@ static_resources:
               routes:
                 - match: { prefix: "/" }
                   route: { cluster: sidecar_to_igw_plain_text_http }
-            request_headers_to_add:
-            - header:
-                key: x-igw-service-name
-                value: "apiguard" # TODO: replace or remove as it's in the cert
+            # THIS IS REMOVED -----------------
+            #request_headers_to_add:
+            #- header:
+            #    key: x-igw-service-name
+            #    value: "apiguard" # TODO: replace or remove as it's in the cert
           http_filters:
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
   clusters:
   - name: sidecar_to_igw_cluster
-    #"@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
     connect_timeout: 5s
     type: LOGICAL_DNS
     dns_lookup_family: V4_ONLY
@@ -68,9 +68,25 @@ static_resources:
         "@type": type.googleapis.com/envoy.extensions.transport_sockets.proxy_protocol.v3.ProxyProtocolUpstreamTransport
         #transport_version: V2
         transport_socket:
-          name: envoy.transport_sockets.raw_buffer
+          # THIS CHANGED -----------------
+          # raw_buffer is replaced by tls
+          #name: envoy.transport_sockets.raw_buffer
+          #typed_config:
+          #  "@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer
+          name: envoy.transport_sockets.tls
           typed_config:
-            "@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            common_tls_context:
+              tls_certificates:
+              - certificate_chain:
+                  filename: /home/admin/ca/intermediate/certs/localcurl.cert.pem
+                private_key:
+                  filename: /home/admin/ca/intermediate/private/localcurl.key.pem
+                password:
+                  inline_string: "envoy"
+              validation_context:
+                  trusted_ca:
+                    filename: /home/admin/ca/intermediate/certs/ca-chain.cert.pem
     load_assignment:
       cluster_name: sidecar_to_igw_cluster
       endpoints:
@@ -106,11 +122,11 @@ static_resources:
         common_tls_context:
           tls_certificates:
           - certificate_chain:
-              filename: /Users/menghan/root/ca/intermediate/certs/localcurl.cert.pem
+              filename: /home/admin/ca/intermediate/certs/localcurl.cert.pem
             private_key:
-              filename: /Users/menghan/root/ca/intermediate/private/localcurl.key.pem
+              filename: /home/admin/ca/intermediate/private/localcurl.key.pem
             password:
               inline_string: "envoy"
           validation_context:
               trusted_ca:
-                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
+                filename: /home/admin/ca/intermediate/certs/ca-chain.cert.pem
