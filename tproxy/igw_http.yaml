@@ -20,6 +20,13 @@ static_resources:
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
           stat_prefix: transparent_proxy_plain_text_http_listener
+          forward_client_cert_details: SANITIZE_SET
+          set_current_client_cert_details:
+            subject: true
+            cert: true
+            chain: true
+            dns: true
+            uri: true
           route_config:
             name: local_route
             virtual_hosts:
@@ -39,12 +46,57 @@ static_resources:
             request_headers_to_remove: 
               - x-igw-service-name
           http_filters:
-          #- name: envoy.filters.http.lua
-          #  typed_config:
-          #    "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
-          #    default_source_code:
-          #      inline_string: "-- Called on the request path.\nfunction envoy_on_request(request_handle)\n  local service_name = request_handle:headers():get(\"x-igw-service-name\")\n  request_handle:streamInfo():dynamicMetadata():set(\"envoy.filters.http.lua\", \"service_name\", service_name)\nend\n      \n"
-          #- name: envoy.filters.http.rbacTransparentProxyPlainText
+          - name: envoy.filters.http.lua
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+              default_source_code: 
+                inline_string: |
+                  function extract_san_dns(cert)
+                    local san_dns = {}
+                    -- Extract SAN DNS from the certificate
+                    for dns in string.gmatch(cert, "DNS=([^,]+)") do
+                      table.insert(san_dns, dns)
+                    end
+                    return san_dns
+                  end
+
+                  function envoy_on_request(request_handle)
+                    local cert = request_handle:headers():get("x-forwarded-client-cert")
+                    request_handle:logInfo("here is the cert" .. cert)
+                    if cert then
+                      local san_dns = extract_san_dns(cert)
+                      request_handle:logInfo("SAN DNS Entries: " .. table.concat(san_dns, ", "))
+                      request_handle:streamInfo():dynamicMetadata():set("envoy.filters.http.lua", "service_name", san_dns)
+                    else
+                      request_handle:respond(
+                        {[":status"] = "403"},
+                        "Client certificate is missing")
+                      return
+                    end
+                  end
+          - name: envoy.filters.http.rbac
+            typed_config: 
+              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC
+              rules:
+                action: ALLOW
+                policies:
+                  "allow_curl_to_google":
+                    permissions:
+                      header:
+                        name: ":authority"
+                        string_match:
+                          safe_regex: 
+                            regex: "^www\\.google\\.com(:[0-9]{1,5})?"
+                    principals:
+                      metadata:
+                        filter: envoy.filters.http.lua
+                        path: 
+                          key: service_name
+                        value:
+                          list_match: 
+                            one_of: 
+                              string_match:
+                                exact: curl
           - name: envoy.filters.http.dynamic_forward_proxy
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
@@ -66,6 +118,24 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
               #suppress_envoy_headers: true
+      transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          require_client_certificate: true
+          common_tls_context:
+            #tls_params:
+            #  tls_min_version: TLSv1_2
+            tls_certificates:
+            - certificate_chain:
+                filename: /Users/menghan/root/ca/intermediate/certs/envoy.cert.pem
+              private_key:
+                filename: /Users/menghan/root/ca/intermediate/private/envoy.key.pem
+              password:
+                inline_string: "envoy"
+            validation_context:
+              trusted_ca:
+                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
   clusters:
   - name: dynamic_transparent_proxy_cluster_plain_text_http
     lb_policy: CLUSTER_PROVIDED

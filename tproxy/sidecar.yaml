@@ -1,0 +1,116 @@
+admin:
+  address:
+    socket_address: { address: 127.0.0.1, port_value: 9902 }
+
+static_resources:
+  listeners:
+  - name: tcp_proxy_sidecar_to_igw
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 12000
+    filter_chains:
+    - filters:
+      - name: tcp
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
+          stat_prefix: ingress_https
+          cluster: sidecar_to_igw_cluster
+          tunneling_config:
+            hostname: "%REQUESTED_SERVER_NAME%:%DOWNSTREAM_LOCAL_PORT%"
+            headers_to_add:
+            - header:
+                key: tproxy_requested_server_name
+                value: "%REQUESTED_SERVER_NAME%"
+    listener_filters:
+      - name: envoy.filters.listener.original_dst
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.listener.original_dst.v3.OriginalDst
+      - name: envoy.filters.listener.tls_inspector
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
+  - name: plain_text_http_proxy_sidecar_to_igw
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 12003
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_https
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+                - match: { prefix: "/" }
+                  route: { cluster: sidecar_to_igw_plain_text_http }
+            request_headers_to_add:
+            - header:
+                key: x-igw-service-name
+                value: "apiguard" # TODO: replace or remove as it's in the cert
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+  - name: sidecar_to_igw_cluster
+    #"@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
+    connect_timeout: 5s
+    type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
+    transport_socket:
+      name: envoy.transport_sockets.upstream_proxy_protocol
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.proxy_protocol.v3.ProxyProtocolUpstreamTransport
+        #transport_version: V2
+        transport_socket:
+          name: envoy.transport_sockets.raw_buffer
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer
+    load_assignment:
+      cluster_name: sidecar_to_igw_cluster
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address:  127.0.0.1
+                port_value: 11000
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http_protocol_options: {}
+  - name: sidecar_to_igw_plain_text_http
+    #"@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
+    connect_timeout: 5s
+    type: LOGICAL_DNS
+    dns_lookup_family: V4_ONLY
+    load_assignment:
+      cluster_name: sidecar_to_igw_plain_text_http
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 11003
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        common_tls_context:
+          tls_certificates:
+          - certificate_chain:
+              filename: /Users/menghan/root/ca/intermediate/certs/localcurl.cert.pem
+            private_key:
+              filename: /Users/menghan/root/ca/intermediate/private/localcurl.key.pem
+            password:
+              inline_string: "envoy"
+          validation_context:
+              trusted_ca:
+                filename: /Users/menghan/root/ca/intermediate/certs/ca-chain.cert.pem
